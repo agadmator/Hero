@@ -121,6 +121,8 @@ let startTime = performance.now();
 let messageVisible = false;
 let revivalTimer = 0;
 let deaths = 0;
+let gameEnded = false;
+let elapsedTime = 0;
 
 if (isMobile) { joyContainer.style.display = "block"; slashBtn.style.display = "block"; }
 else { joyContainer.style.display = "none"; slashBtn.style.display = "none"; }
@@ -328,7 +330,7 @@ function drawChest() {
 function checkSlashHit(enemy) {
   if (!player.slashing || player.slashTimer <= 0 || !enemy.alive || player.hitEnemies.has(enemy)) return;
   const dx = enemy.x - player.x;
-  const dy = enemy.y - player.y;
+  const dy = enemy.y - enemy.y;
   const dist = Math.sqrt(dx * dx + dy * dy);
   if (dist > 50) return;
   let angle = Math.atan2(dy, dx);
@@ -446,7 +448,6 @@ async function endGame() {
     await db.collection("highscores").add({name: name.trim(), time: elapsed});
     await updateHighscores();
   }
-  // Game ends, no more loop
 }
 
 let inLevelMenu = false;
@@ -531,8 +532,6 @@ function handleLevelMenu(dt, vx, vy) {
 }
 
 let lastTime = performance.now();
-let gameEnded = false;
-let elapsedTime = 0;
 function gameLoop(ts) {
   const dt = Math.min(0.05, (ts - lastTime) / 1000);
   lastTime = ts;
