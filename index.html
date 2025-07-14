@@ -121,8 +121,6 @@ let startTime = performance.now();
 let messageVisible = false;
 let revivalTimer = 0;
 let deaths = 0;
-let gameEnded = false;
-let elapsedTime = 0;
 
 if (isMobile) { joyContainer.style.display = "block"; slashBtn.style.display = "block"; }
 else { joyContainer.style.display = "none"; slashBtn.style.display = "none"; }
@@ -184,28 +182,17 @@ function getInputDir() {
 function startSlash() { if (!player.slashing && !inLevelMenu) { player.slashing = true; player.slashTimer = 0.20; player.hitEnemies = new Set(); } }
 
 function enterRoom(roomIdx, fromDir) {
-  const oldRoom = ROOMS[currentRoom];
-  const oldRx = GRID_ORIGIN_X + oldRoom.cx * ROOM_SIZE;
-  const oldRy = GRID_ORIGIN_Y + oldRoom.cy * ROOM_SIZE;
   currentRoom = roomIdx;
   const rx = GRID_ORIGIN_X + ROOMS[roomIdx].cx*ROOM_SIZE;
   const ry = GRID_ORIGIN_Y + ROOMS[roomIdx].cy*ROOM_SIZE;
   if (fromDir === "up") {
-    player.x = player.x - oldRx + rx;
-    player.y = ry + PLAYER_SIZE / 2 + 1;
-    player.facing = "down";
+    player.y = ry + ROOM_SIZE - PLAYER_SIZE / 2;
   } else if (fromDir === "down") {
-    player.x = player.x - oldRx + rx;
-    player.y = ry + ROOM_SIZE - PLAYER_SIZE / 2 - 1;
-    player.facing = "up";
+    player.y = ry + PLAYER_SIZE / 2;
   } else if (fromDir === "left") {
-    player.x = rx + ROOM_SIZE - PLAYER_SIZE / 2 - 1;
-    player.y = player.y - oldRy + ry;
-    player.facing = "right";
+    player.x = rx + ROOM_SIZE - PLAYER_SIZE / 2;
   } else if (fromDir === "right") {
-    player.x = rx + PLAYER_SIZE / 2 + 1;
-    player.y = player.y - oldRy + ry;
-    player.facing = "left";
+    player.x = rx + PLAYER_SIZE / 2;
   } else {
     player.x = rx + ROOM_SIZE/2;
     player.y = ry + ROOM_SIZE/2;
@@ -330,7 +317,7 @@ function drawChest() {
 function checkSlashHit(enemy) {
   if (!player.slashing || player.slashTimer <= 0 || !enemy.alive || player.hitEnemies.has(enemy)) return;
   const dx = enemy.x - player.x;
-  const dy = enemy.y - enemy.y;
+  const dy = enemy.y - player.y;
   const dist = Math.sqrt(dx * dx + dy * dy);
   if (dist > 50) return;
   let angle = Math.atan2(dy, dx);
@@ -544,9 +531,6 @@ function gameLoop(ts) {
     }
   });
   if (currentRoom === 6) drawChest();
-  if (gameEnded) {
-    return;
-  }
   if (inLevelMenu) {
     let {vx, vy} = getInputDir();
     handleLevelMenu(dt, vx, vy);
@@ -571,6 +555,9 @@ function gameLoop(ts) {
       const doorKey = Math.min(currentRoom, room.neighbors.up) + '-' + Math.max(currentRoom, room.neighbors.up);
       if (!lockedDoors.has(doorKey) && !roomEnemiesAlive) {
         dir = "up"; targetRoom = room.neighbors.up; wentToRoom = true;
+        const overshoot = (ry + halfPlayer) - nextY;
+        enterRoom(targetRoom, dir);
+        player.y -= overshoot;
       } else {
         nextY = ry + halfPlayer;
       }
@@ -578,6 +565,9 @@ function gameLoop(ts) {
       const doorKey = Math.min(currentRoom, room.neighbors.down) + '-' + Math.max(currentRoom, room.neighbors.down);
       if (!lockedDoors.has(doorKey) && !roomEnemiesAlive) {
         dir = "down"; targetRoom = room.neighbors.down; wentToRoom = true;
+        const overshoot = nextY - (ry + ROOM_SIZE - halfPlayer);
+        enterRoom(targetRoom, dir);
+        player.y += overshoot;
       } else {
         nextY = ry + ROOM_SIZE - halfPlayer;
       }
@@ -585,6 +575,9 @@ function gameLoop(ts) {
       const doorKey = Math.min(currentRoom, room.neighbors.left) + '-' + Math.max(currentRoom, room.neighbors.left);
       if (!lockedDoors.has(doorKey) && !roomEnemiesAlive) {
         dir = "left"; targetRoom = room.neighbors.left; wentToRoom = true;
+        const overshoot = (rx + halfPlayer) - nextX;
+        enterRoom(targetRoom, dir);
+        player.x -= overshoot;
       } else {
         nextX = rx + halfPlayer;
       }
@@ -592,13 +585,14 @@ function gameLoop(ts) {
       const doorKey = Math.min(currentRoom, room.neighbors.right) + '-' + Math.max(currentRoom, room.neighbors.right);
       if (!lockedDoors.has(doorKey) && !roomEnemiesAlive) {
         dir = "right"; targetRoom = room.neighbors.right; wentToRoom = true;
+        const overshoot = nextX - (rx + ROOM_SIZE - halfPlayer);
+        enterRoom(targetRoom, dir);
+        player.x += overshoot;
       } else {
         nextX = rx + ROOM_SIZE - halfPlayer;
       }
     }
-    if (wentToRoom && targetRoom !== null) {
-      enterRoom(targetRoom, dir);
-    } else {
+    if (!wentToRoom) {
       player.x = Math.max(rx + halfPlayer, Math.min(rx + ROOM_SIZE - halfPlayer, nextX));
       player.y = Math.max(ry + halfPlayer, Math.min(ry + ROOM_SIZE - halfPlayer, nextY));
     }
