@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -10,7 +10,6 @@
     #ui { position: absolute; top: 10px; left: 10px; z-index: 10; background: rgba(0,0,0,0.7); padding: 6px 12px; border-radius: 10px; font-size: 20px; pointer-events: none;}
     #highscores { position: absolute; top: 10px; right: 200px; z-index: 10; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 10px; font-size: 16px; pointer-events: none;}
     #message { position: absolute; bottom: 100px; left: 50%; transform: translate(-50%, 0); z-index: 15; background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px; font-size: 24px; display: none; text-align: center; max-width: 80%; transition: opacity 1s; border: 2px solid #8B0000;}
-    #finalMessage { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 15; background: rgba(0,0,0,0.8); padding: 30px; border-radius: 10px; font-size: 32px; display: none; text-align: center; max-width: 80%; border: 2px solid #8B0000;}
     #controls { position: absolute; top: 200px; right: 10px; z-index: 10; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 10px; font-size: 16px; pointer-events: none;}
     #inventory { position: absolute; top: 10px; right: 10px; z-index: 10; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 10px; font-size: 16px; pointer-events: none;}
     #joyContainer { position: fixed; bottom: 30px; left: 30px; z-index: 20; width: 120px; height: 120px; display: none; touch-action: none; user-select: none;}
@@ -19,12 +18,14 @@
     #slashBtn { position: fixed; right: 40px; bottom: 55px; width: 80px; height: 80px; border-radius: 50%; background: linear-gradient(145deg, #ff6060, #ee0000 90%); border: none; color: #fff; font-size: 30px; font-weight: bold; box-shadow: 0 0 10px #0008; z-index: 22; display: none; touch-action: none; user-select: none;}
     #slashBtn:active { background: #ff9090; }
   </style>
+  <!-- Firebase SDK via CDN -->
+  <script type="module" src="https://www.gstatic.com/firebasejs/10.1.0/firebase-app.js"></script>
+  <script type="module" src="https://www.gstatic.com/firebasejs/10.1.0/firebase-firestore.js"></script>
 </head>
 <body>
 <div id="ui">Dungeon Level 1: Room 5/9<br>HP: 10</div>
 <div id="highscores"></div>
 <div id="message"></div>
-<div id="finalMessage"></div>
 <div id="controls">
   <h3>Controls</h3>
   <p>WASD: Move</p>
@@ -44,7 +45,23 @@
   <div id="joystickKnob"></div>
 </div>
 <button id="slashBtn">SLASH</button>
-<script>
+<script type="module">
+  // Initialize Firebase
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.1.0/firebase-app.js';
+  import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit } from 'https://www.gstatic.com/firebasejs/10.1.0/firebase-firestore.js';
+
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT_ID.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
 const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
 
 const ROOM_SIZE = 200, PLAYER_SIZE = 32, DOOR_SIZE = 40, PLAYER_SPEED = 180;
@@ -102,10 +119,24 @@ const slashBtn = document.getElementById('slashBtn');
 const GRID_ORIGIN_X = (CANVAS_W - ROOM_SIZE*3) / 2;
 const GRID_ORIGIN_Y = (CANVAS_H - ROOM_SIZE*3) / 2;
 
-let highscores = JSON.parse(localStorage.getItem('highscores')) || [];
-highscores = highscores.filter(entry => entry && typeof entry.time === 'number' && !isNaN(entry.time) && entry.name);
-highscores.sort((a, b) => a.time - b.time);
-updateHighscores();
+let highscores = [];
+async function updateHighscores() {
+  const q = query(collection(db, "highscores"), orderBy("time"), limit(10));
+  const querySnapshot = await getDocs(q);
+  highscores = [];
+  querySnapshot.forEach((doc) => {
+    highscores.push(doc.data());
+  });
+  if (highscores.length === 0) {
+    highscoresDiv.innerHTML = '<h3>High Scores</h3><p>No scores yet</p>';
+    return;
+  }
+  highscoresDiv.innerHTML = '<h3>High Scores</h3><ul>' + highscores.map(entry => {
+    const minutes = Math.floor(entry.time / 60);
+    const seconds = (entry.time % 60).toString().padStart(2, '0');
+    return `<li>${entry.name} - ${minutes}:${seconds}</li>`;
+  }).join('') + '</ul>';
+}
 
 let startTime = performance.now();
 let messageVisible = false;
@@ -196,7 +227,7 @@ function drawRoom(roomIdx) {
     ctx.beginPath();
     ctx.rect(rx, ry, ROOM_SIZE, ROOM_SIZE);
     ctx.fill(); ctx.stroke();
-    ctx.strokeStyle = "#999";
+    ctx.strokeStyle = "#fff";
     ctx.lineWidth = 10;
     if (ROOMS[i].neighbors.up !== undefined)
       ctx.strokeRect(rx+ROOM_SIZE/2-DOOR_SIZE/2, ry-ctx.lineWidth/2, DOOR_SIZE, ctx.lineWidth);
@@ -389,11 +420,6 @@ function showMessage(text) {
   }, 4000);
 }
 
-function showFinalMessage(text) {
-  finalMessage.innerText = text;
-  finalMessage.style.display = 'block';
-}
-
 function updateHighscores() {
   if (highscores.length === 0) {
     highscoresDiv.innerHTML = '<h3>High Scores</h3><p>No scores yet</p>';
@@ -421,8 +447,7 @@ function endGame() {
     localStorage.setItem('highscores', JSON.stringify(highscores));
     updateHighscores();
   }
-  showFinalMessage("ako ste uživali, javite Toniju kaj da doda u igru");
-  gameEnded = true;
+  // Game ends, no more loop
 }
 
 let inLevelMenu = false;
@@ -519,10 +544,6 @@ function gameLoop(ts) {
     }
   });
   if (currentRoom === 6) drawChest();
-  if (gameEnded) {
-    // Stop updating game state
-    return;
-  }
   if (inLevelMenu) {
     let {vx, vy} = getInputDir();
     handleLevelMenu(dt, vx, vy);
@@ -712,6 +733,7 @@ enemies.forEach(enemy => {
   enemy.y = GRID_ORIGIN_Y + eRoom.cy * ROOM_SIZE + ROOM_SIZE / 2 + (Math.random() * 100 - 50);
 });
 updateInventory();
+updateHighscores(); // Load from Firestore on start
 gameLoop(performance.now());
 </script>
 </body>
