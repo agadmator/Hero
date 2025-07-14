@@ -18,9 +18,9 @@
     #slashBtn { position: fixed; right: 40px; bottom: 55px; width: 80px; height: 80px; border-radius: 50%; background: linear-gradient(145deg, #ff6060, #ee0000 90%); border: none; color: #fff; font-size: 30px; font-weight: bold; box-shadow: 0 0 10px #0008; z-index: 22; display: none; touch-action: none; user-select: none;}
     #slashBtn:active { background: #ff9090; }
   </style>
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/10.1.0/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.1.0/firebase-firestore.js"></script>
+  <!-- Firebase SDK (compat version for namespaced usage) -->
+  <script src="https://www.gstatic.com/firebasejs/10.1.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.1.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
 <div id="ui">Dungeon Level 1: Room 5/9<br>HP: 10</div>
@@ -395,13 +395,18 @@ function showMessage(text) {
   }, 4000);
 }
 
-function updateHighscores() {
+async function updateHighscores() {
+  const q = db.collection("highscores").orderBy("time").limit(10);
+  const querySnapshot = await q.get();
+  highscores = [];
+  querySnapshot.forEach((doc) => {
+    highscores.push(doc.data());
+  });
   if (highscores.length === 0) {
     highscoresDiv.innerHTML = '<h3>High Scores</h3><p>No scores yet</p>';
     return;
   }
   highscoresDiv.innerHTML = '<h3>High Scores</h3><ul>' + highscores.map(entry => {
-    if (!entry || typeof entry.time !== 'number' || isNaN(entry.time) || !entry.name) return '';
     const minutes = Math.floor(entry.time / 60);
     const seconds = (entry.time % 60).toString().padStart(2, '0');
     return `<li>${entry.name} - ${minutes}:${seconds}</li>`;
@@ -412,17 +417,17 @@ function updateInventory() {
   inventoryDiv.innerHTML = `<h3>Inventory</h3><p>Equipment: Sword</p><p>Items: Potion x${player.inventory.potions}</p>`;
 }
 
-function endGame() {
+async function endGame() {
   const elapsed = Math.floor((performance.now() - startTime) / 1000);
   ctx.fillStyle = 'black';
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
   const name = prompt("Enter your name for the high scores:");
   if (name && name.trim()) {
-    highscores.push({name: name.trim(), time: elapsed});
-    localStorage.setItem('highscores', JSON.stringify(highscores));
-    updateHighscores();
+    await db.collection("highscores").add({name: name.trim(), time: elapsed});
+    await updateHighscores();
   }
   // Game ends, no more loop
+  gameEnded = true;
 }
 
 let inLevelMenu = false;
@@ -708,6 +713,7 @@ enemies.forEach(enemy => {
   enemy.y = GRID_ORIGIN_Y + eRoom.cy * ROOM_SIZE + ROOM_SIZE / 2 + (Math.random() * 100 - 50);
 });
 updateInventory();
+updateHighscores(); // Load from Firestore on start
 gameLoop(performance.now());
 </script>
 </body>
