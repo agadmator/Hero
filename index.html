@@ -182,14 +182,33 @@ function getInputDir() {
 function startSlash() { if (!player.slashing && !inLevelMenu) { player.slashing = true; player.slashTimer = 0.20; player.hitEnemies = new Set(); } }
 
 function enterRoom(roomIdx, fromDir) {
+  const oldRoom = ROOMS[currentRoom];
+  const oldRx = GRID_ORIGIN_X + oldRoom.cx * ROOM_SIZE;
+  const oldRy = GRID_ORIGIN_Y + oldRoom.cy * ROOM_SIZE;
   currentRoom = roomIdx;
   const rx = GRID_ORIGIN_X + ROOMS[roomIdx].cx*ROOM_SIZE;
   const ry = GRID_ORIGIN_Y + ROOMS[roomIdx].cy*ROOM_SIZE;
-  if (fromDir === "up") { player.x = rx + ROOM_SIZE/2; player.y = ry + ROOM_SIZE - PLAYER_SIZE - 14; player.facing = "up"; }
-  else if (fromDir === "down") { player.x = rx + ROOM_SIZE/2; player.y = ry + 14 + PLAYER_SIZE/2; player.facing = "down"; }
-  else if (fromDir === "left") { player.x = rx + ROOM_SIZE - PLAYER_SIZE - 14; player.y = ry + ROOM_SIZE/2; player.facing = "left"; }
-  else if (fromDir === "right") { player.x = rx + 14 + PLAYER_SIZE/2; player.y = ry + ROOM_SIZE/2; player.facing = "right"; }
-  else { player.x = rx + ROOM_SIZE/2; player.y = ry + ROOM_SIZE/2; player.facing = "down"; }
+  if (fromDir === "up") {
+    player.x = player.x - oldRx + rx;
+    player.y = ry + PLAYER_SIZE / 2 + 1;
+    player.facing = "down";
+  } else if (fromDir === "down") {
+    player.x = player.x - oldRx + rx;
+    player.y = ry + ROOM_SIZE - PLAYER_SIZE / 2 - 1;
+    player.facing = "up";
+  } else if (fromDir === "left") {
+    player.x = rx + ROOM_SIZE - PLAYER_SIZE / 2 - 1;
+    player.y = player.y - oldRy + ry;
+    player.facing = "right";
+  } else if (fromDir === "right") {
+    player.x = rx + PLAYER_SIZE / 2 + 1;
+    player.y = player.y - oldRy + ry;
+    player.facing = "left";
+  } else {
+    player.x = rx + ROOM_SIZE/2;
+    player.y = ry + ROOM_SIZE/2;
+    player.facing = "down";
+  }
 }
 
 function drawRoom(roomIdx) {
@@ -418,6 +437,7 @@ function updateInventory() {
 }
 
 async function endGame() {
+  gameEnded = true;
   const elapsed = Math.floor((performance.now() - startTime) / 1000);
   ctx.fillStyle = 'black';
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
@@ -427,7 +447,6 @@ async function endGame() {
     await updateHighscores();
   }
   // Game ends, no more loop
-  gameEnded = true;
 }
 
 let inLevelMenu = false;
@@ -512,6 +531,8 @@ function handleLevelMenu(dt, vx, vy) {
 }
 
 let lastTime = performance.now();
+let gameEnded = false;
+let elapsedTime = 0;
 function gameLoop(ts) {
   const dt = Math.min(0.05, (ts - lastTime) / 1000);
   lastTime = ts;
@@ -524,6 +545,9 @@ function gameLoop(ts) {
     }
   });
   if (currentRoom === 6) drawChest();
+  if (gameEnded) {
+    return;
+  }
   if (inLevelMenu) {
     let {vx, vy} = getInputDir();
     handleLevelMenu(dt, vx, vy);
@@ -697,8 +721,10 @@ function gameLoop(ts) {
       player.hp = player.maxHP;
     }
   }
-  const elapsed = Math.floor((performance.now() - startTime) / 1000);
-  ui.innerHTML = `Dungeon Level 1: Room ${currentRoom}/9<br>HP: ${player.hp}/${player.maxHP}<br>Time: ${Math.floor(elapsed / 60)}:${(elapsed % 60).toString().padStart(2, '0')}`;
+  if (!gameEnded) {
+    elapsedTime = Math.floor((performance.now() - startTime) / 1000);
+  }
+  ui.innerHTML = `Dungeon Level 1: Room ${currentRoom}/9<br>HP: ${player.hp}/${player.maxHP}<br>Time: ${Math.floor(elapsedTime / 60)}:${(elapsedTime % 60).toString().padStart(2, '0')}`;
   requestAnimationFrame(gameLoop);
 }
 
