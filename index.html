@@ -18,9 +18,9 @@
     #slashBtn { position: fixed; right: 40px; bottom: 55px; width: 80px; height: 80px; border-radius: 50%; background: linear-gradient(145deg, #ff6060, #ee0000 90%); border: none; color: #fff; font-size: 30px; font-weight: bold; box-shadow: 0 0 10px #0008; z-index: 22; display: none; touch-action: none; user-select: none;}
     #slashBtn:active { background: #ff9090; }
   </style>
-  <!-- Firebase SDK via CDN -->
-  <script type="module" src="https://www.gstatic.com/firebasejs/10.1.0/firebase-app.js"></script>
-  <script type="module" src="https://www.gstatic.com/firebasejs/10.1.0/firebase-firestore.js"></script>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.1.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.1.0/firebase-firestore.js"></script>
 </head>
 <body>
 <div id="ui">Dungeon Level 1: Room 5/9<br>HP: 10</div>
@@ -45,22 +45,20 @@
   <div id="joystickKnob"></div>
 </div>
 <button id="slashBtn">SLASH</button>
-<script type="module">
+<script>
   // Initialize Firebase
-  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.1.0/firebase-app.js';
-  import { getFirestore, collection, addDoc, getDocs, query, orderBy, limit } from 'https://www.gstatic.com/firebasejs/10.1.0/firebase-firestore.js';
-
   const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
+    apiKey: "AIzaSyCSXMMHZ68YWbIXFTN9hecKrF3fu2LEdrg",
+    authDomain: "god-of-wheels.firebaseapp.com",
+    databaseURL: "https://god-of-wheels-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "god-of-wheels",
+    storageBucket: "god-of-wheels.firebasestorage.app",
+    messagingSenderId: "56099021474",
+    appId: "1:56099021474:web:d420dc74e8eb4bb387adfb",
+    measurementId: "G-HTBLTWJRKL"
   };
-
-  const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
 
 const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
 
@@ -119,30 +117,10 @@ const slashBtn = document.getElementById('slashBtn');
 const GRID_ORIGIN_X = (CANVAS_W - ROOM_SIZE*3) / 2;
 const GRID_ORIGIN_Y = (CANVAS_H - ROOM_SIZE*3) / 2;
 
-let highscores = [];
-async function updateHighscores() {
-  const q = query(collection(db, "highscores"), orderBy("time"), limit(10));
-  const querySnapshot = await getDocs(q);
-  highscores = [];
-  querySnapshot.forEach((doc) => {
-    highscores.push(doc.data());
-  });
-  if (highscores.length === 0) {
-    highscoresDiv.innerHTML = '<h3>High Scores</h3><p>No scores yet</p>';
-    return;
-  }
-  highscoresDiv.innerHTML = '<h3>High Scores</h3><ul>' + highscores.map(entry => {
-    const minutes = Math.floor(entry.time / 60);
-    const seconds = (entry.time % 60).toString().padStart(2, '0');
-    return `<li>${entry.name} - ${minutes}:${seconds}</li>`;
-  }).join('') + '</ul>';
-}
-
 let startTime = performance.now();
 let messageVisible = false;
 let revivalTimer = 0;
 let deaths = 0;
-let gameEnded = false;
 
 if (isMobile) { joyContainer.style.display = "block"; slashBtn.style.display = "block"; }
 else { joyContainer.style.display = "none"; slashBtn.style.display = "none"; }
@@ -155,9 +133,6 @@ document.addEventListener("keydown", e => {
     player.inventory.potions--;
     player.hp = Math.min(player.maxHP, player.hp + Math.floor(player.maxHP * 0.5));
     updateInventory();
-  }
-  if (gameEnded && key === "n") {
-    location.reload();
   }
 });
 document.addEventListener("keyup", e => { if (["w", "a","s","d","k","o","p","r"].includes(e.key.toLowerCase()) ) keys[e.key.toLowerCase()] = false; });
@@ -733,7 +708,6 @@ enemies.forEach(enemy => {
   enemy.y = GRID_ORIGIN_Y + eRoom.cy * ROOM_SIZE + ROOM_SIZE / 2 + (Math.random() * 100 - 50);
 });
 updateInventory();
-updateHighscores(); // Load from Firestore on start
 gameLoop(performance.now());
 </script>
 </body>
