@@ -77,6 +77,7 @@ ROOMS[8] = {id: 8, cx: 1, cy: 2, neighbors: {up: 5, left: 7, right: 9}};
 ROOMS[9] = {id: 9, cx: 2, cy: 2, neighbors: {up: 6, left: 8}};
 
 let currentRoom = 5;
+let currentFloor = 1;
 let player = { 
   x: 0, y: 0, vx: 0, vy: 0, facing: "down", slashing: false, slashTimer: 0, 
   hp: 10, maxHP: 10, keys: new Set(), 
@@ -86,22 +87,9 @@ let player = {
   inventory: {potions: 1}
 };
 let keys = {};
-let lockedDoors = new Set(['5-6', '2-5', '5-8', '7-8', '8-9', '1-4', '3-6']);
-
-const enemies = [
-  {type: 'poke', room: 1, hp: 4, maxHP: 4, alive: true, attackTimer: 0},
-  {type: 'poke', room: 2, hp: 4, maxHP: 4, alive: true, attackTimer: 0},
-  {type: 'poke', room: 2, hp: 4, maxHP: 4, alive: true, attackTimer: 0},
-  {type: 'poke', room: 3, hp: 4, maxHP: 4, alive: true, attackTimer: 0},
-  {type: 'poke', room: 4, hp: 4, maxHP: 4, alive: true, attackTimer: 0},
-  {type: 'tiger', room: 6, hp: 7, maxHP: 7, alive: true, attackTimer: 0, fireballs: []},
-  {type: 'poke', room: 7, hp: 5, maxHP: 5, alive: true, attackTimer: 0},
-  {type: 'poke', room: 8, hp: 4, maxHP: 4, alive: true, attackTimer: 0},
-  {type: 'poke', room: 8, hp: 4, maxHP: 4, alive: true, attackTimer: 0},
-  {type: 'tiger', room: 9, hp: 5, maxHP: 5, alive: true, attackTimer: 0, fireballs: []}
-];
-
-const chest = {room: 6, opened: false};
+let lockedDoors = new Set();
+let enemies = [];
+let chest = {room: 9, opened: false};
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -528,6 +516,46 @@ function handleLevelMenu(dt, vx, vy) {
   }
 }
 
+function generateEnemies(floor) {
+  const enemyList = [];
+  const unlockRooms = [2, 4, 6, 7, 8, 9];
+  for (let r = 1; r <= 9; r++) {
+    let minNum = unlockRooms.includes(r) ? 1 : 0;
+    let numInRoom = minNum + Math.floor(Math.random() * (floor + 1));
+    if (r === 5) numInRoom = Math.floor(Math.random() * floor); // Fewer in start room
+    for (let i = 0; i < numInRoom; i++) {
+      let typeProb = Math.random();
+      let type = 'poke';
+      if (typeProb < 0.1 * floor) type = 'tiger';
+      let baseHP = type === 'poke' ? 4 : 7;
+      let hp = baseHP + (floor - 1) * 3 + Math.floor(Math.random() * (floor * 2));
+      enemyList.push({type, room: r, hp, maxHP: hp, alive: true, attackTimer: 0, fireballs: type === 'tiger' ? [] : undefined});
+    }
+  }
+  // Add boss to chest room
+  let bossHP = 10 + floor * 5;
+  enemyList.push({type: 'tiger', room: chest.room, hp: bossHP, maxHP: bossHP, alive: true, attackTimer: 0, fireballs: []});
+  return enemyList;
+}
+
+function initFloor() {
+  lockedDoors = new Set(['5-6', '2-5', '5-8', '7-8', '8-9', '1-4', '3-6']);
+  player.keys = new Set();
+  chest.opened = false;
+  enemies = generateEnemies(currentFloor);
+  enemies.forEach(enemy => {
+    const eRoom = ROOMS[enemy.room];
+    enemy.x = GRID_ORIGIN_X + eRoom.cx * ROOM_SIZE + ROOM_SIZE / 2 + (Math.random() * 100 - 50);
+    enemy.y = GRID_ORIGIN_Y + eRoom.cy * ROOM_SIZE + ROOM_SIZE / 2 + (Math.random() * 100 - 50);
+  });
+  currentRoom = 5;
+  const initRoom = ROOMS[5];
+  player.x = GRID_ORIGIN_X + initRoom.cx * ROOM_SIZE + ROOM_SIZE / 2;
+  player.y = GRID_ORIGIN_Y + initRoom.cy * ROOM_SIZE + ROOM_SIZE / 2;
+  player.hp = player.maxHP; // Heal on new floor
+  updateInventory();
+}
+
 let lastTime = performance.now();
 function gameLoop(ts) {
   const dt = Math.min(0.05, (ts - lastTime) / 1000);
@@ -540,7 +568,7 @@ function gameLoop(ts) {
       drawEnemy(enemy);
     }
   });
-  if (currentRoom === 6) drawChest();
+  if (currentRoom === chest.room) drawChest();
   if (inLevelMenu) {
     let {vx, vy} = getInputDir();
     handleLevelMenu(dt, vx, vy);
@@ -665,25 +693,31 @@ function gameLoop(ts) {
       remainingPoints = 5;
       inLevelMenu = true;
     }
-    if (currentRoom === 6 && !chest.opened) {
-      const rx = GRID_ORIGIN_X + ROOMS[6].cx * ROOM_SIZE;
-      const ry = GRID_ORIGIN_Y + ROOMS[6].cy * ROOM_SIZE;
+    if (currentRoom === chest.room && !chest.opened) {
+      const rx = GRID_ORIGIN_X + ROOMS[chest.room].cx * ROOM_SIZE;
+      const ry = GRID_ORIGIN_Y + ROOMS[chest.room].cy * ROOM_SIZE;
       chest.x = rx + ROOM_SIZE / 2 + 80;
       chest.y = ry + ROOM_SIZE / 2;
       const cdx = chest.x - player.x;
       const cdy = chest.y - player.y;
       const cdist = Math.sqrt(cdx * cdx + cdy * cdy);
       if (player.slashing && cdist < 50) {
-        const tigerAlive = enemies.find(e => e.room === 6 && e.alive);
-        if (!tigerAlive) {
+        const guardsAlive = enemies.some(e => e.room === chest.room && e.alive);
+        if (guardsAlive) {
+          showMessage("Enemies are guarding the chest!");
+        } else {
           if (player.keys.has('chest')) {
             chest.opened = true;
-            endGame();
+            if (currentFloor < 3) {
+              currentFloor++;
+              showMessage("You found a treasure and stairs to the next floor!");
+              initFloor();
+            } else {
+              endGame();
+            }
           } else {
             showMessage("The chest is locked.");
           }
-        } else {
-          showMessage("Enemies are guarding the chest!");
         }
       }
     }
@@ -717,21 +751,13 @@ function gameLoop(ts) {
   if (!gameEnded) {
     elapsedTime = Math.floor((performance.now() - startTime) / 1000);
   }
-  ui.innerHTML = `Dungeon Level 1: Room ${currentRoom}/9<br>HP: ${player.hp}/${player.maxHP}<br>Time: ${Math.floor(elapsedTime / 60)}:${(elapsedTime % 60).toString().padStart(2, '0')}`;
+  ui.innerHTML = `Dungeon Level ${currentFloor}: Room ${currentRoom}/9<br>HP: ${player.hp}/${player.maxHP}<br>Time: ${Math.floor(elapsedTime / 60)}:${(elapsedTime % 60).toString().padStart(2, '0')}`;
   requestAnimationFrame(gameLoop);
 }
 
-// Initialize positions
-const initRoom = ROOMS[5];
-player.x = GRID_ORIGIN_X + initRoom.cx * ROOM_SIZE + ROOM_SIZE / 2;
-player.y = GRID_ORIGIN_Y + initRoom.cy * ROOM_SIZE + ROOM_SIZE / 2;
+// Initialize
 player.maxHP = 10 + player.stats.sta * 5;
-enemies.forEach(enemy => {
-  const eRoom = ROOMS[enemy.room];
-  enemy.x = GRID_ORIGIN_X + eRoom.cx * ROOM_SIZE + ROOM_SIZE / 2 + (Math.random() * 100 - 50);
-  enemy.y = GRID_ORIGIN_Y + eRoom.cy * ROOM_SIZE + ROOM_SIZE / 2 + (Math.random() * 100 - 50);
-});
-updateInventory();
+initFloor();
 updateHighscores(); // Load from Firestore on start
 gameLoop(performance.now());
 </script>
