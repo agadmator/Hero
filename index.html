@@ -121,6 +121,8 @@ let startTime = performance.now();
 let messageVisible = false;
 let revivalTimer = 0;
 let deaths = 0;
+let gameEnded = false;
+let elapsedTime = 0;
 
 if (isMobile) { joyContainer.style.display = "block"; slashBtn.style.display = "block"; }
 else { joyContainer.style.display = "none"; slashBtn.style.display = "none"; }
@@ -183,21 +185,12 @@ function startSlash() { if (!player.slashing && !inLevelMenu) { player.slashing 
 
 function enterRoom(roomIdx, fromDir) {
   currentRoom = roomIdx;
-  const rx = GRID_ORIGIN_X + ROOMS[roomIdx].cx*ROOM_SIZE;
-  const ry = GRID_ORIGIN_Y + ROOMS[roomIdx].cy*ROOM_SIZE;
-  if (fromDir === "up") {
-    player.y = ry + ROOM_SIZE - PLAYER_SIZE - 14;
-  } else if (fromDir === "down") {
-    player.y = ry + 14 + PLAYER_SIZE / 2;
-  } else if (fromDir === "left") {
-    player.x = rx + ROOM_SIZE - PLAYER_SIZE - 14;
-  } else if (fromDir === "right") {
-    player.x = rx + 14 + PLAYER_SIZE / 2;
-  } else {
-    player.x = rx + ROOM_SIZE/2;
-    player.y = ry + ROOM_SIZE/2;
-    player.facing = "down";
-  }
+  // No position adjustment needed for seamless, as position is absolute and continuous
+  // Update facing
+  if (fromDir === "up") player.facing = "up";
+  else if (fromDir === "down") player.facing = "down";
+  else if (fromDir === "left") player.facing = "left";
+  else if (fromDir === "right") player.facing = "right";
 }
 
 function drawRoom(roomIdx) {
@@ -519,8 +512,6 @@ function handleLevelMenu(dt, vx, vy) {
 }
 
 let lastTime = performance.now();
-let gameEnded = false;
-let elapsedTime = 0;
 function gameLoop(ts) {
   const dt = Math.min(0.05, (ts - lastTime) / 1000);
   lastTime = ts;
@@ -533,9 +524,6 @@ function gameLoop(ts) {
     }
   });
   if (currentRoom === 6) drawChest();
-  if (gameEnded) {
-    return;
-  }
   if (inLevelMenu) {
     let {vx, vy} = getInputDir();
     handleLevelMenu(dt, vx, vy);
@@ -586,7 +574,13 @@ function gameLoop(ts) {
       }
     }
     if (wentToRoom && targetRoom !== null) {
-      enterRoom(targetRoom, dir);
+      currentRoom = targetRoom;
+      player.x = nextX;
+      player.y = nextY;
+      if (dir === "up") player.facing = "up";
+      else if (dir === "down") player.facing = "down";
+      else if (dir === "left") player.facing = "left";
+      else if (dir === "right") player.facing = "right";
     } else {
       player.x = Math.max(rx + halfPlayer, Math.min(rx + ROOM_SIZE - halfPlayer, nextX));
       player.y = Math.max(ry + halfPlayer, Math.min(ry + ROOM_SIZE - halfPlayer, nextY));
