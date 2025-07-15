@@ -8,19 +8,37 @@
     html, body { margin: 0; background: #111; height: 100%; width: 100vw; overflow: hidden; font-family: sans-serif; color: #fff;}
     #gameCanvas { display: block; margin: 40px auto; background: #222; border-radius: 8px; box-shadow: 0 2px 16px #000;}
     #ui { position: absolute; top: 10px; left: 10px; z-index: 10; background: rgba(0,0,0,0.7); padding: 6px 12px; border-radius: 10px; font-size: 20px; pointer-events: none;}
-    #highscores { position: absolute; top: 50px; right: 100px; z-index: 10; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 10px; font-size: 16px; pointer-events: none;}
-    #message { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 15; background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px; font-size: 24px; display: none; text-align: center; max-width: 80%;}
+    #highscores { position: absolute; top: 10px; right: 200px; z-index: 10; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 10px; font-size: 16px; pointer-events: none;}
+    #message { position: absolute; bottom: 100px; left: 50%; transform: translate(-50%, 0); z-index: 15; background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px; font-size: 24px; display: none; text-align: center; max-width: 80%; transition: opacity 1s; border: 2px solid #8B0000;}
+    #controls { position: absolute; top: 200px; right: 10px; z-index: 10; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 10px; font-size: 16px; pointer-events: none;}
+    #inventory { position: absolute; top: 10px; right: 10px; z-index: 10; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 10px; font-size: 16px; pointer-events: none;}
     #joyContainer { position: fixed; bottom: 30px; left: 30px; z-index: 20; width: 120px; height: 120px; display: none; touch-action: none; user-select: none;}
     #joystickBg { width: 120px; height: 120px; background: #4446; border-radius: 50%; position: absolute; left: 0; top: 0; border: 2px solid #bbb;}
     #joystickKnob { width: 56px; height: 56px; background: #6cf; border-radius: 50%; position: absolute; left: 32px; top: 32px; border: 2px solid #fff; transition: background 0.08s;}
     #slashBtn { position: fixed; right: 40px; bottom: 55px; width: 80px; height: 80px; border-radius: 50%; background: linear-gradient(145deg, #ff6060, #ee0000 90%); border: none; color: #fff; font-size: 30px; font-weight: bold; box-shadow: 0 0 10px #0008; z-index: 22; display: none; touch-action: none; user-select: none;}
     #slashBtn:active { background: #ff9090; }
   </style>
+  <!-- Firebase SDK (compat version for namespaced usage) -->
+  <script src="https://www.gstatic.com/firebasejs/10.1.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.1.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
 <div id="ui">Dungeon Level 1: Room 5/9<br>HP: 10</div>
 <div id="highscores"></div>
 <div id="message"></div>
+<div id="controls">
+  <h3>Controls</h3>
+  <p>WASD: Move</p>
+  <p>K: Slash</p>
+  <p>O: Confirm</p>
+  <p>P: Drink Potion</p>
+  <p>R: Random Stats</p>
+</div>
+<div id="inventory">
+  <h3>Inventory</h3>
+  <p>Equipment: Sword</p>
+  <p>Items: Potion x1</p>
+</div>
 <canvas id="gameCanvas" width="700" height="600"></canvas>
 <div id="joyContainer">
   <div id="joystickBg"></div>
@@ -28,9 +46,23 @@
 </div>
 <button id="slashBtn">SLASH</button>
 <script>
+  // Initialize Firebase
+  const firebaseConfig = {
+    apiKey: "AIzaSyCSXMMHZ68YWbIXFTN9hecKrF3fu2LEdrg",
+    authDomain: "god-of-wheels.firebaseapp.com",
+    databaseURL: "https://god-of-wheels-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "god-of-wheels",
+    storageBucket: "god-of-wheels.firebasestorage.app",
+    messagingSenderId: "56099021474",
+    appId: "1:56099021474:web:d420dc74e8eb4bb387adfb",
+    measurementId: "G-HTBLTWJRKL"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+
 const isMobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
 
-const ROOM_SIZE = 260, PLAYER_SIZE = 32, DOOR_SIZE = 40, PLAYER_SPEED = 180;
+const ROOM_SIZE = 200, PLAYER_SIZE = 32, DOOR_SIZE = 40, PLAYER_SPEED = 180;
 const CANVAS_W = 700, CANVAS_H = 600;
 
 const ROOMS = [];
@@ -50,7 +82,8 @@ let player = {
   hp: 10, maxHP: 10, keys: new Set(), 
   lvl: 1, exp: 0, expToNext: 100, statPoints: 0,
   stats: {str: 1, sta: 1, dod: 1},
-  hitEnemies: new Set()
+  hitEnemies: new Set(),
+  inventory: {potions: 1}
 };
 let keys = {};
 let lockedDoors = new Set(['5-6', '2-5', '5-8', '7-8', '8-9', '1-4', '3-6']);
@@ -75,26 +108,34 @@ const ctx = canvas.getContext('2d');
 const ui = document.getElementById('ui');
 const highscoresDiv = document.getElementById('highscores');
 const message = document.getElementById('message');
+const inventoryDiv = document.getElementById('inventory');
 const joyContainer = document.getElementById('joyContainer');
 const joystickBg = document.getElementById('joystickBg');
 const joystickKnob = document.getElementById('joystickKnob');
 const slashBtn = document.getElementById('slashBtn');
 
-const GRID_ORIGIN_X = (CANVAS_W - ROOM_SIZE * 3) / 2;
-const GRID_ORIGIN_Y = (CANVAS_H - ROOM_SIZE *3) / 2;
-
-let highscores = JSON.parse(localStorage.getItem('highscores')) || [];
-highscores.sort((a, b) => a.time - b.time);
-updateHighscores();
+const GRID_ORIGIN_X = (CANVAS_W - ROOM_SIZE*3) / 2;
+const GRID_ORIGIN_Y = (CANVAS_H - ROOM_SIZE*3) / 2;
 
 let startTime = performance.now();
+let messageVisible = false;
+let revivalTimer = 0;
+let deaths = 0;
 
 if (isMobile) { joyContainer.style.display = "block"; slashBtn.style.display = "block"; }
 else { joyContainer.style.display = "none"; slashBtn.style.display = "none"; }
 
  // Keyboard
-document.addEventListener("keydown", e => { if (["w", "a","s","d","k"].includes(e.key.toLowerCase()) ) keys[e.key.toLowerCase()] = true; });
-document.addEventListener("keyup", e => { if (["w", "a","s","d","k"].includes(e.key.toLowerCase()) ) keys[e.key.toLowerCase()] = false; });
+document.addEventListener("keydown", e => { 
+  const key = e.key.toLowerCase();
+  if (["w", "a","s","d","k","o","p","r"].includes(key)) keys[key] = true; 
+  if (key === "p" && player.inventory.potions > 0) {
+    player.inventory.potions--;
+    player.hp = Math.min(player.maxHP, player.hp + Math.floor(player.maxHP * 0.5));
+    updateInventory();
+  }
+});
+document.addEventListener("keyup", e => { if (["w", "a","s","d","k","o","p","r"].includes(e.key.toLowerCase()) ) keys[e.key.toLowerCase()] = false; });
 if (!isMobile) document.addEventListener("keydown", e => { if (e.key.toLowerCase() === "k") startSlash(); });
 slashBtn.addEventListener("touchstart", e => { e.preventDefault(); startSlash(); });
 
@@ -140,36 +181,50 @@ function getInputDir() {
 
 function startSlash() { if (!player.slashing && !inLevelMenu) { player.slashing = true; player.slashTimer = 0.20; player.hitEnemies = new Set(); } }
 
-function enterRoom(roomId, fromDir) {
-  currentRoom = roomId;
-  const room = ROOMS[roomId];
-  const rx = GRID_ORIGIN_X + room.cx * ROOM_SIZE;
-  const ry = GRID_ORIGIN_Y + room.cy * ROOM_SIZE;
-  let halfPlayer = PLAYER_SIZE / 2;
-  let oppositeDir;
-  if (fromDir === "up") { oppositeDir = "down"; player.y = ry + ROOM_SIZE - halfPlayer; player.facing = "up"; }
-  else if (fromDir === "down") { oppositeDir = "up"; player.y = ry + halfPlayer; player.facing = "down"; }
-  else if (fromDir === "left") { oppositeDir = "right"; player.x = rx + ROOM_SIZE - halfPlayer; player.facing = "left"; }
-  else if (fromDir === "right") { oppositeDir = "left"; player.x = rx + halfPlayer; player.facing = "right"; }
-  player.x = Math.max(rx + halfPlayer, Math.min(rx + ROOM_SIZE - halfPlayer, player.x));
-  player.y = Math.max(ry + halfPlayer, Math.min(ry + ROOM_SIZE - halfPlayer, player.y));
+function enterRoom(roomIdx, fromDir) {
+  currentRoom = roomIdx;
+  const rx = GRID_ORIGIN_X + ROOMS[roomIdx].cx*ROOM_SIZE;
+  const ry = GRID_ORIGIN_Y + ROOMS[roomIdx].cy*ROOM_SIZE;
+  if (fromDir === "up") {
+    player.y = ry + ROOM_SIZE - PLAYER_SIZE - 14;
+  } else if (fromDir === "down") {
+    player.y = ry + 14 + PLAYER_SIZE / 2;
+  } else if (fromDir === "left") {
+    player.x = rx + ROOM_SIZE - PLAYER_SIZE - 14;
+  } else if (fromDir === "right") {
+    player.x = rx + 14 + PLAYER_SIZE / 2;
+  } else {
+    player.x = rx + ROOM_SIZE/2;
+    player.y = ry + ROOM_SIZE/2;
+    player.facing = "down";
+  }
 }
 
-function drawRoom(roomId) {
-  const room = ROOMS[roomId];
-  const rx = GRID_ORIGIN_X + room.cx * ROOM_SIZE;
-  const ry = GRID_ORIGIN_Y + room.cy * ROOM_SIZE;
+function drawRoom(roomIdx) {
+  ctx.lineWidth = 3;
+  for (let i=1; i<ROOMS.length; ++i) {
+    const rx = GRID_ORIGIN_X + ROOMS[i].cx*ROOM_SIZE;
+    const ry = GRID_ORIGIN_Y + ROOMS[i].cy*ROOM_SIZE;
+    ctx.strokeStyle = "#fff";
+    ctx.fillStyle = (i === roomIdx) ? "#498f45" : "#323232";
+    ctx.beginPath();
+    ctx.rect(rx, ry, ROOM_SIZE, ROOM_SIZE);
+    ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 10;
+    if (ROOMS[i].neighbors.up !== undefined)
+      ctx.strokeRect(rx+ROOM_SIZE/2-DOOR_SIZE/2, ry-ctx.lineWidth/2, DOOR_SIZE, ctx.lineWidth);
+    if (ROOMS[i].neighbors.down !== undefined)
+      ctx.strokeRect(rx+ROOM_SIZE/2-DOOR_SIZE/2, ry+ROOM_SIZE-ctx.lineWidth/2, DOOR_SIZE, ctx.lineWidth);
+    if (ROOMS[i].neighbors.left !== undefined)
+      ctx.strokeRect(rx-ctx.lineWidth/2, ry+ROOM_SIZE/2-DOOR_SIZE/2, ctx.lineWidth, DOOR_SIZE);
+    if (ROOMS[i].neighbors.right !== undefined)
+      ctx.strokeRect(rx+ROOM_SIZE-ctx.lineWidth/2, ry+ROOM_SIZE/2-DOOR_SIZE/2, ctx.lineWidth, DOOR_SIZE);
+  }
+  // Draw outer borders
   ctx.strokeStyle = "#fff";
-  ctx.fillStyle = "#498f45";
-  ctx.beginPath();
-  ctx.rect(rx, ry, ROOM_SIZE, ROOM_SIZE);
-  ctx.fill(); ctx.stroke();
-  ctx.strokeStyle = "#999";
-  ctx.lineWidth = 10;
-  if (room.neighbors.up) ctx.strokeRect(rx + ROOM_SIZE / 2 - DOOR_SIZE / 2, ry - ctx.lineWidth / 2, DOOR_SIZE, ctx.lineWidth);
-  if (room.neighbors.down) ctx.strokeRect(rx + ROOM_SIZE / 2 - DOOR_SIZE / 2, ry + ROOM_SIZE - ctx.lineWidth / 2, DOOR_SIZE, ctx.lineWidth);
-  if (room.neighbors.left) ctx.strokeRect(rx - ctx.lineWidth / 2, ry + ROOM_SIZE / 2 - DOOR_SIZE / 2, ctx.lineWidth, DOOR_SIZE);
-  if (room.neighbors.right) ctx.strokeRect(rx + ROOM_SIZE - ctx.lineWidth / 2, ry + ROOM_SIZE / 2 - DOOR_SIZE / 2, ctx.lineWidth, DOOR_SIZE);
+  ctx.lineWidth = 3;
+  ctx.strokeRect(GRID_ORIGIN_X, GRID_ORIGIN_Y, ROOM_SIZE*3, ROOM_SIZE*3);
 }
 
 function drawHPBar(x, y, hp, maxHP) {
@@ -248,9 +303,8 @@ function drawEnemy(enemy) {
 
 function drawChest() {
   if (chest.opened) return;
-  const room = ROOMS[chest.room];
-  const rx = GRID_ORIGIN_X + room.cx * ROOM_SIZE;
-  const ry = GRID_ORIGIN_Y + room.cy * ROOM_SIZE;
+  const rx = GRID_ORIGIN_X + ROOMS[chest.room].cx * ROOM_SIZE;
+  const ry = GRID_ORIGIN_Y + ROOMS[chest.room].cy * ROOM_SIZE;
   const cx = rx + ROOM_SIZE / 2 + 80;
   const cy = ry + ROOM_SIZE / 2;
   ctx.fillStyle = "#8b4513";
@@ -282,15 +336,33 @@ function checkSlashHit(enemy) {
     if (enemy.hp <= 0) {
       enemy.alive = false;
       player.exp += 50;
+      if (Math.random() < 0.15) {
+        player.inventory.potions++;
+        updateInventory();
+        showMessage("Enemy dropped a potion!");
+      }
       handleEnemyDeath(enemy);
     }
   }
 }
 
+const unlockMessages = [
+  "A new path opens.",
+  "The barrier breaks, showing a way.",
+  "A secret door appears.",
+  "The wall opens a passage.",
+  "Shadows clear, making a path.",
+  "The darkness lifts, revealing a corridor.",
+  "The way is clear to a hidden trail.",
+  "A new route is open."
+];
+let messageIndex = 0;
+
 function handleEnemyDeath(enemy) {
   const roomEnemiesAlive = enemies.filter(e => e.room === enemy.room && e.alive).length;
   if (roomEnemiesAlive === 0) {
-    let unlockMsg = "A haunting whisper echoes, as shadows part to reveal a mysterious path.";
+    const unlockMsg = unlockMessages[messageIndex % unlockMessages.length];
+    messageIndex++;
     if (enemy.room === 4) {
       lockedDoors.delete('5-6');
       showMessage(unlockMsg);
@@ -315,32 +387,54 @@ function handleEnemyDeath(enemy) {
   const allEnemiesDead = enemies.every(e => !e.alive);
   if (allEnemiesDead && !player.keys.has('chest')) {
     player.keys.add('chest');
-    showMessage("The final shadow fades, yielding the enigmatic key shrouded in mystery.");
+    showMessage("You found a key.");
   }
 }
 
-function showMessage(text, duration = 3000) {
+function showMessage(text) {
   message.innerText = text;
   message.style.display = 'block';
-  setTimeout(() => { message.style.display = 'none'; }, duration);
+  message.style.opacity = 1;
+  setTimeout(() => {
+    message.style.opacity = 0;
+    setTimeout(() => {
+      message.style.display = 'none';
+    }, 1000);
+  }, 4000);
 }
 
-function updateHighscores() {
-  highscores.sort((a, b) => a.time - b.time);
-  highscoresDiv.innerHTML = '<h3>High Scores</h3><ul>' + highscores.map(entry => `<li>${entry.name} - ${Math.floor(entry.time / 60)}:${(entry.time % 60).toString().padStart(2, '0')}</li>`).join('') + '</ul>';
+async function updateHighscores() {
+  const q = db.collection("highscores").orderBy("time").limit(10);
+  const querySnapshot = await q.get();
+  highscores = [];
+  querySnapshot.forEach((doc) => {
+    highscores.push(doc.data());
+  });
+  if (highscores.length === 0) {
+    highscoresDiv.innerHTML = '<h3>High Scores</h3><p>No scores yet</p>';
+    return;
+  }
+  highscoresDiv.innerHTML = '<h3>High Scores</h3><ul>' + highscores.map(entry => {
+    const minutes = Math.floor(entry.time / 60);
+    const seconds = (entry.time % 60).toString().padStart(2, '0');
+    return `<li>${entry.name} - ${minutes}:${seconds}</li>`;
+  }).join('') + '</ul>';
 }
 
-function endGame() {
+function updateInventory() {
+  inventoryDiv.innerHTML = `<h3>Inventory</h3><p>Equipment: Sword</p><p>Items: Potion x${player.inventory.potions}</p>`;
+}
+
+async function endGame() {
+  gameEnded = true;
   const elapsed = Math.floor((performance.now() - startTime) / 1000);
   ctx.fillStyle = 'black';
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
   const name = prompt("Enter your name for the high scores:");
-  if (name) {
-    highscores.push({name, time: elapsed});
-    localStorage.setItem('highscores', JSON.stringify(highscores));
-    updateHighscores();
+  if (name && name.trim()) {
+    await db.collection("highscores").add({name: name.trim(), time: elapsed});
+    await updateHighscores();
   }
-  // Game ends, no more loop
 }
 
 let inLevelMenu = false;
@@ -369,20 +463,28 @@ function drawLevelMenu() {
   }
   ctx.fillText(`Remaining: ${remainingPoints}`, CANVAS_W / 2, CANVAS_H / 2 + 70);
   ctx.font = '14px sans-serif';
-  ctx.fillText('(If you just press K, stats will increase on random)', CANVAS_W / 2, CANVAS_H / 2 + 100);
+  ctx.fillText('(If you just press R, stats will increase on random)', CANVAS_W / 2, CANVAS_H / 2 + 100);
   ctx.restore();
 }
 
 function handleLevelMenu(dt, vx, vy) {
   inputCooldown -= dt;
   if (inputCooldown > 0) return;
-  if (keys['k']) {
-    if (remainingPoints === 5) {
-      // Random allocate
-      for (let i = 0; i < 5; i++) {
-        const r = Math.floor(Math.random() * 3);
-        allocated[statNames[r]]++;
-      }
+  if (keys['o']) {
+    // Apply
+    player.stats.str += allocated.str;
+    player.stats.sta += allocated.sta;
+    player.stats.dod += allocated.dod;
+    player.maxHP = 10 + player.stats.sta * 5;
+    if (player.hp > player.maxHP) player.hp = player.maxHP;
+    inLevelMenu = false;
+    allocated = {str: 0, sta: 0, dod: 0};
+    remainingPoints = 0;
+  } else if (keys['r']) {
+    // Random allocate
+    for (let i = 0; i < 5; i++) {
+      const r = Math.floor(Math.random() * 3);
+      allocated[statNames[r]]++;
     }
     // Apply
     player.stats.str += allocated.str;
@@ -417,6 +519,8 @@ function handleLevelMenu(dt, vx, vy) {
 }
 
 let lastTime = performance.now();
+let gameEnded = false;
+let elapsedTime = 0;
 function gameLoop(ts) {
   const dt = Math.min(0.05, (ts - lastTime) / 1000);
   lastTime = ts;
@@ -429,6 +533,9 @@ function gameLoop(ts) {
     }
   });
   if (currentRoom === 6) drawChest();
+  if (gameEnded) {
+    return;
+  }
   if (inLevelMenu) {
     let {vx, vy} = getInputDir();
     handleLevelMenu(dt, vx, vy);
@@ -446,32 +553,33 @@ function gameLoop(ts) {
     const centerY = ry + ROOM_SIZE / 2;
     const halfPlayer = PLAYER_SIZE / 2;
     const doorHalf = DOOR_SIZE / 2 + 10;
+    const roomEnemiesAlive = enemies.filter(e => e.room === currentRoom && e.alive).length > 0;
     let wentToRoom = false;
     let dir = null, targetRoom = null;
     if (nextY < ry + halfPlayer && room.neighbors.up && Math.abs(nextX - centerX) <= doorHalf) {
       const doorKey = Math.min(currentRoom, room.neighbors.up) + '-' + Math.max(currentRoom, room.neighbors.up);
-      if (!lockedDoors.has(doorKey)) {
+      if (!lockedDoors.has(doorKey) && !roomEnemiesAlive) {
         dir = "up"; targetRoom = room.neighbors.up; wentToRoom = true;
       } else {
         nextY = ry + halfPlayer;
       }
     } else if (nextY > ry + ROOM_SIZE - halfPlayer && room.neighbors.down && Math.abs(nextX - centerX) <= doorHalf) {
       const doorKey = Math.min(currentRoom, room.neighbors.down) + '-' + Math.max(currentRoom, room.neighbors.down);
-      if (!lockedDoors.has(doorKey)) {
+      if (!lockedDoors.has(doorKey) && !roomEnemiesAlive) {
         dir = "down"; targetRoom = room.neighbors.down; wentToRoom = true;
       } else {
         nextY = ry + ROOM_SIZE - halfPlayer;
       }
     } else if (nextX < rx + halfPlayer && room.neighbors.left && Math.abs(nextY - centerY) <= doorHalf) {
       const doorKey = Math.min(currentRoom, room.neighbors.left) + '-' + Math.max(currentRoom, room.neighbors.left);
-      if (!lockedDoors.has(doorKey)) {
+      if (!lockedDoors.has(doorKey) && !roomEnemiesAlive) {
         dir = "left"; targetRoom = room.neighbors.left; wentToRoom = true;
       } else {
         nextX = rx + halfPlayer;
       }
     } else if (nextX > rx + ROOM_SIZE - halfPlayer && room.neighbors.right && Math.abs(nextY - centerY) <= doorHalf) {
       const doorKey = Math.min(currentRoom, room.neighbors.right) + '-' + Math.max(currentRoom, room.neighbors.right);
-      if (!lockedDoors.has(doorKey)) {
+      if (!lockedDoors.has(doorKey) && !roomEnemiesAlive) {
         dir = "right"; targetRoom = room.neighbors.right; wentToRoom = true;
       } else {
         nextX = rx + ROOM_SIZE - halfPlayer;
@@ -494,7 +602,7 @@ function gameLoop(ts) {
         let dy = player.y - enemy.y;
         let dist = Math.sqrt(dx * dx + dy * dy);
         if (dist > 0) {
-          const speed = enemy.type === 'tiger' ? 80 : 100;
+          const speed = enemy.type === 'tiger' ? 60 : 80;
           enemy.x += (dx / dist) * speed * dt;
           enemy.y += (dy / dist) * speed * dt;
         }
@@ -553,11 +661,10 @@ function gameLoop(ts) {
       inLevelMenu = true;
     }
     if (currentRoom === 6 && !chest.opened) {
-      const room6 = ROOMS[6];
-      const rx6 = GRID_ORIGIN_X + room6.cx * ROOM_SIZE;
-      const ry6 = GRID_ORIGIN_Y + room6.cy * ROOM_SIZE;
-      chest.x = rx6 + ROOM_SIZE / 2 + 80;
-      chest.y = ry6 + ROOM_SIZE / 2;
+      const rx = GRID_ORIGIN_X + ROOMS[6].cx * ROOM_SIZE;
+      const ry = GRID_ORIGIN_Y + ROOMS[6].cy * ROOM_SIZE;
+      chest.x = rx + ROOM_SIZE / 2 + 80;
+      chest.y = ry + ROOM_SIZE / 2;
       const cdx = chest.x - player.x;
       const cdy = chest.y - player.y;
       const cdist = Math.sqrt(cdx * cdx + cdy * cdy);
@@ -566,24 +673,46 @@ function gameLoop(ts) {
         if (!tigerAlive) {
           if (player.keys.has('chest')) {
             chest.opened = true;
-            showMessage("ako ste uživali, javite Toniju kaj da doda u igru", 5000);
-            setTimeout(endGame, 5000);
+            endGame();
           } else {
-            showMessage("An aura of mystery seals the chest tight.");
+            showMessage("The chest is locked.");
           }
         } else {
-          showMessage("Fierce guardians protect the ancient treasure!");
+          showMessage("Enemies are guarding the chest!");
         }
       }
     }
-    if (player.hp <= 0) {
-      alert("Shadows claim you...");
-      player.hp = player.maxHP;
-      enterRoom(5, null);
+    if (player.hp <= 0 && revivalTimer <= 0) {
+      deaths++;
+      if (deaths === 1) {
+        showMessage("A fairy saves you. You get one more chance!");
+        revivalTimer = 2;
+      } else {
+        alert("Game over. The shadows win.");
+        location.reload();
+      }
     }
   }
-  const elapsed = Math.floor((performance.now() - startTime) / 1000);
-  ui.innerHTML = `Dungeon Level 1: Room ${currentRoom}/9<br>HP: ${player.hp}/${player.maxHP}<br>Time: ${Math.floor(elapsed / 60)}:${(elapsed % 60).toString().padStart(2, '0')}`;
+  if (revivalTimer > 0) {
+    revivalTimer -= dt;
+    revivalTimer = Math.max(0, revivalTimer);
+    // Draw revival animation - simple glowing fairy
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(player.x, player.y - 50, Math.max(0, 20 * (revivalTimer / 2)), 0, 2 * Math.PI);
+    ctx.fillStyle = "rgba(255, 255, 0, " + (revivalTimer / 2) + ")";
+    ctx.shadowColor = "#ffff00";
+    ctx.shadowBlur = 20;
+    ctx.fill();
+    ctx.restore();
+    if (revivalTimer <= 0) {
+      player.hp = player.maxHP;
+    }
+  }
+  if (!gameEnded) {
+    elapsedTime = Math.floor((performance.now() - startTime) / 1000);
+  }
+  ui.innerHTML = `Dungeon Level 1: Room ${currentRoom}/9<br>HP: ${player.hp}/${player.maxHP}<br>Time: ${Math.floor(elapsedTime / 60)}:${(elapsedTime % 60).toString().padStart(2, '0')}`;
   requestAnimationFrame(gameLoop);
 }
 
@@ -597,6 +726,8 @@ enemies.forEach(enemy => {
   enemy.x = GRID_ORIGIN_X + eRoom.cx * ROOM_SIZE + ROOM_SIZE / 2 + (Math.random() * 100 - 50);
   enemy.y = GRID_ORIGIN_Y + eRoom.cy * ROOM_SIZE + ROOM_SIZE / 2 + (Math.random() * 100 - 50);
 });
+updateInventory();
+updateHighscores(); // Load from Firestore on start
 gameLoop(performance.now());
 </script>
 </body>
