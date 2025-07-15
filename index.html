@@ -185,12 +185,29 @@ function startSlash() { if (!player.slashing && !inLevelMenu) { player.slashing 
 
 function enterRoom(roomIdx, fromDir) {
   currentRoom = roomIdx;
-  // No position adjustment needed for seamless, as position is absolute and continuous
-  // Update facing
-  if (fromDir === "up") player.facing = "up";
-  else if (fromDir === "down") player.facing = "down";
-  else if (fromDir === "left") player.facing = "left";
-  else if (fromDir === "right") player.facing = "right";
+  const rx = GRID_ORIGIN_X + ROOMS[roomIdx].cx*ROOM_SIZE;
+  const ry = GRID_ORIGIN_Y + ROOMS[roomIdx].cy*ROOM_SIZE;
+  if (fromDir === "up") {
+    player.x = player.x;
+    player.y = ry + ROOM_SIZE - PLAYER_SIZE - 14;
+    player.facing = "up";
+  } else if (fromDir === "down") {
+    player.x = player.x;
+    player.y = ry + 14 + PLAYER_SIZE / 2;
+    player.facing = "down";
+  } else if (fromDir === "left") {
+    player.x = rx + ROOM_SIZE - PLAYER_SIZE - 14;
+    player.y = player.y;
+    player.facing = "left";
+  } else if (fromDir === "right") {
+    player.x = rx + 14 + PLAYER_SIZE / 2;
+    player.y = player.y;
+    player.facing = "right";
+  } else {
+    player.x = rx + ROOM_SIZE/2;
+    player.y = ry + ROOM_SIZE/2;
+    player.facing = "down";
+  }
 }
 
 function drawRoom(roomIdx) {
@@ -574,13 +591,7 @@ function gameLoop(ts) {
       }
     }
     if (wentToRoom && targetRoom !== null) {
-      currentRoom = targetRoom;
-      player.x = nextX;
-      player.y = nextY;
-      if (dir === "up") player.facing = "up";
-      else if (dir === "down") player.facing = "down";
-      else if (dir === "left") player.facing = "left";
-      else if (dir === "right") player.facing = "right";
+      enterRoom(targetRoom, dir);
     } else {
       player.x = Math.max(rx + halfPlayer, Math.min(rx + ROOM_SIZE - halfPlayer, nextX));
       player.y = Math.max(ry + halfPlayer, Math.min(ry + ROOM_SIZE - halfPlayer, nextY));
